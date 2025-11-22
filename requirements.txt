@@ -1,0 +1,5 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0 # have to homebrew/curl gdal in order for it to work
+osmnx>=1.9.4
+networkx>=3.2.1
+scikit-learn>=1.5.0

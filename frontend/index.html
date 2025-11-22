@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Munich Safe Ways</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #0f172a;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: linear-gradient(135deg, #0f172a 0%, #1d3557 40%, #457b9d 100%);
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .controls {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            z-index: 1000;
+            width: min(360px, calc(100% - 48px));
+            padding: 22px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 30px 45px rgba(15, 23, 42, 0.35);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .controls h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .controls p {
+            margin: 0;
+            font-size: 13px;
+            color: #475569;
+        }
+
+        .mode-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .mode-card {
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            border-radius: 16px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            cursor: pointer;
+            transition: border-color 0.3s, box-shadow 0.3s, transform 0.2s;
+        }
+
+        .mode-card:hover {
+            border-color: rgba(15, 23, 42, 0.4);
+            box-shadow: 0 16px 24px rgba(15, 23, 42, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .mode-card.active {
+            border-color: #0f6d2c;
+            box-shadow: 0 22px 30px rgba(15, 109, 44, 0.18);
+        }
+
+        .mode-chip {
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            background: #f1f5f9;
+            color: #0f172a;
+            cursor: pointer;
+        }
+
+        .mode-card.active .mode-chip {
+            background: #0f6d2c;
+            color: #fff;
+        }
+
+        .mode-card p {
+            font-size: 12px;
+            color: #475569;
+            line-height: 1.45;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #334155;
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+            padding-top: 10px;
+            line-height: 1.4;
+        }
+
+        .stats-card {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: rgba(248, 250, 252, 0.9);
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .stat-note {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .comparison-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .comparison-pill {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .comparison-pill.good {
+            background: rgba(16, 185, 129, 0.15);
+            color: #047857;
+        }
+
+        .comparison-pill.bad {
+            background: rgba(248, 113, 113, 0.16);
+            color: #b91c1c;
+        }
+
+        .comparison-pill.neutral {
+            background: rgba(148, 163, 184, 0.2);
+            color: #475569;
+        }
+
+        @media (max-width: 600px) {
+            .controls {
+                top: auto;
+                bottom: 16px;
+                left: 16px;
+                right: 16px;
+                width: auto;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="controls">
+        <h1>Choose your vibe</h1>
+        <p>Pick a routing personality to match how you want to move through Munich.</p>
+        <div id="mode-buttons" class="mode-buttons"></div>
+        <div class="hint">Click once for start, once for end. A third click resets. Datasets: OpenStreetMap + Munich
+            incident archive (fuchsvomwalde/munichwatcher).</div>
+        <div class="stats-card" id="stats-card">
+            <div class="stat-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Distance</div>
+                    <div class="stat-value" id="stat-distance">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">ETA</div>
+                    <div class="stat-value" id="stat-duration">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Scenic score</div>
+                    <div class="stat-value" id="stat-scenic">--</div>
+                    <div class="stat-note">Trees / water exposure</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Safety score</div>
+                    <div class="stat-value" id="stat-safety">--</div>
+                    <div class="stat-note">Lighting + crowd support</div>
+                </div>
+            </div>
+            <div class="comparison-list" id="comparison-list">
+                <span class="comparison-pill neutral">Pick two points to compare modes</span>
+            </div>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const backendUrl = "http://localhost:8000";
+        const MODE_OPTIONS = [
+            {
+                id: "fast",
+                label: "Direct",
+                description: "Cuts through traffic, shrugs at scenery and even rewards darker shortcuts.",
+            },
+            {
+                id: "safe",
+                label: "Night Safe",
+                description: "Stays close to light, transit and police anchors while dodging reported crime clusters.",
+            },
+            {
+                id: "scenic",
+                label: "Scenic",
+                description: "Seeks river walks, parks and tree-lined alleys for the most pleasant detour.",
+            },
+        ];
+        const MODE_COLORS = {
+            fast: "#dd5e00",
+            safe: "#d1245c",
+            scenic: "#0e7c91",
+        };
+        const COMPARISON_METRICS = [
+            { key: "green_share", upLabel: "more greenery", downLabel: "less greenery", betterWhen: "up" },
+            { key: "safe_anchor_share", upLabel: "closer to help", downLabel: "fewer safe anchors", betterWhen: "up" },
+            { key: "lit_share", upLabel: "better lighting", downLabel: "less lighting", betterWhen: "up" },
+            { key: "bike_share", upLabel: "more bike infra", downLabel: "less bike infra", betterWhen: "up" },
+            { key: "crime_hot_share", upLabel: "more hotspots", downLabel: "fewer hotspots", betterWhen: "down" },
+            { key: "duration_s", upLabel: "longer trip", downLabel: "quicker trip", betterWhen: "down" },
+        ];
+        let map = L.map("map").setView([48.1374, 11.5755], 13);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+        }).addTo(map);
+
+        let startMarker = null;
+        let endMarker = null;
+        let routeLayer = null;
+        let currentMode = "safe";
+        const modeButtonsContainer = document.getElementById("mode-buttons");
+        const statDistance = document.getElementById("stat-distance");
+        const statDuration = document.getElementById("stat-duration");
+        const statScenic = document.getElementById("stat-scenic");
+        const statSafety = document.getElementById("stat-safety");
+        const comparisonList = document.getElementById("comparison-list");
+        resetStats();
+
+        MODE_OPTIONS.forEach(opt => {
+            const card = document.createElement("div");
+            card.className = "mode-card";
+            card.dataset.mode = opt.id;
+
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "mode-chip";
+            chip.textContent = opt.label;
+            chip.addEventListener("click", (event) => {
+                event.stopPropagation();
+                setMode(opt.id);
+            });
+
+            const desc = document.createElement("p");
+            desc.textContent = opt.description;
+
+            card.appendChild(chip);
+            card.appendChild(desc);
+            card.addEventListener("click", () => setMode(opt.id));
+            modeButtonsContainer.appendChild(card);
+        });
+        updateModeButtons();
+
+        function setMode(mode) {
+            currentMode = mode;
+            updateModeButtons();
+            if (startMarker && endMarker) {
+                fetchRoute();
+            }
+        }
+
+        function updateModeButtons() {
+            document.querySelectorAll(".mode-card").forEach(card => {
+                if (card.dataset.mode === currentMode) {
+                    card.classList.add("active");
+                } else {
+                    card.classList.remove("active");
+                }
+            });
+        }
+
+        map.on("click", (e) => {
+            if (!startMarker) {
+                startMarker = L.marker(e.latlng).addTo(map).bindPopup("Start").openPopup();
+            } else if (!endMarker) {
+                endMarker = L.marker(e.latlng).addTo(map).bindPopup("End").openPopup();
+                fetchRoute();
+            } else {
+                map.removeLayer(startMarker);
+                map.removeLayer(endMarker);
+                if (routeLayer) map.removeLayer(routeLayer);
+                startMarker = L.marker(e.latlng).addTo(map).bindPopup("Start").openPopup();
+                endMarker = null;
+                resetStats();
+            }
+        });
+
+        async function fetchRoute() {
+            const start = startMarker.getLatLng();
+            const end = endMarker.getLatLng();
+
+            const url = `${backendUrl}/route?mode=${currentMode}` +
+                `&start_lat=${start.lat}&start_lon=${start.lng}` +
+                `&end_lat=${end.lat}&end_lon=${end.lng}`;
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) {
+                    alert("No route found");
+                    resetStats();
+                    return;
+                }
+                const geojson = await res.json();
+                drawRoute(geojson);
+            } catch (e) {
+                console.error(e);
+                alert("Error fetching route");
+                resetStats();
+            }
+        }
+
+        function drawRoute(feature) {
+            if (routeLayer) {
+                map.removeLayer(routeLayer);
+            }
+            const color = MODE_COLORS[currentMode] || "#228b22";
+            routeLayer = L.geoJSON(feature, {
+                style: {
+                    color,
+                    weight: 5
+                }
+            }).addTo(map);
+            map.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
+            updateStats(feature.properties);
+        }
+
+        function updateStats(props) {
+            if (!props || !props.stats) {
+                resetStats();
+                return;
+            }
+            const stats = props.stats;
+            const lengthValue = stats.length_m ?? props.length_m ?? 0;
+            const durationValue = stats.duration_s ?? props.duration_s ?? 0;
+            statDistance.textContent = formatDistance(lengthValue);
+            statDuration.textContent = formatDuration(durationValue);
+            statScenic.textContent = `${Math.round((stats.avg_scenic || 0) * 100)}%`;
+            statSafety.textContent = `${Math.round((stats.avg_safe_score || 0) * 100)}%`;
+            renderComparison(props.comparison_to_fast);
+        }
+
+        function renderComparison(info) {
+            comparisonList.innerHTML = "";
+            if (!info || !info.ratios) {
+                comparisonList.innerHTML = '<span class="comparison-pill neutral">Run a route to compare with Direct</span>';
+                return;
+            }
+            const baselineLabel = info.baseline_label || "Direct";
+            const ratios = info.ratios;
+            const statements = [];
+            COMPARISON_METRICS.forEach(def => {
+                const value = ratios[def.key];
+                if (typeof value !== "number" || !Number.isFinite(value) || value === 0) {
+                    return;
+                }
+                const deltaPct = Math.round(value * 100);
+                if (!deltaPct) {
+                    return;
+                }
+                const isPositive = deltaPct > 0;
+                const label = isPositive ? def.upLabel : def.downLabel;
+                const tone = ((isPositive && def.betterWhen === "up") || (!isPositive && def.betterWhen === "down")) ? "good" : "bad";
+                const formatted = `${deltaPct > 0 ? "+" : ""}${deltaPct}% ${label} vs ${baselineLabel}`;
+                statements.push({ text: formatted, tone });
+            });
+
+            if (!statements.length) {
+                comparisonList.innerHTML = `<span class="comparison-pill neutral">No major differences vs ${baselineLabel}</span>`;
+                return;
+            }
+
+            statements.slice(0, 3).forEach(item => {
+                const pill = document.createElement("span");
+                pill.className = `comparison-pill ${item.tone}`;
+                pill.textContent = item.text;
+                comparisonList.appendChild(pill);
+            });
+        }
+
+        function formatDistance(meters) {
+            if (!meters) return "0 m";
+            if (meters >= 1000) {
+                return `${(meters / 1000).toFixed(2)} km`;
+            }
+            return `${meters.toFixed(0)} m`;
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds || seconds < 60) {
+                return "<1 min";
+            }
+            const minutes = Math.round(seconds / 60);
+            if (minutes >= 60) {
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                return mins ? `${hours} h ${mins} min` : `${hours} h`;
+            }
+            return `${minutes} min`;
+        }
+
+        function resetStats() {
+            statDistance.textContent = "--";
+            statDuration.textContent = "--";
+            statScenic.textContent = "--";
+            statSafety.textContent = "--";
+            comparisonList.innerHTML = '<span class="comparison-pill neutral">Pick two points to compare modes</span>';
+        }
+    </script>
+</body>
+
+</html>

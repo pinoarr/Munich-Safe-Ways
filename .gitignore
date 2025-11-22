@@ -1,0 +1,14 @@
+# Backend data and caches (generated, never commit)
+backend/data/
+backend/cache/
+cache/
+
+# Large generated geodata
+*.graphml
+*.gpickle
+*.osm
+*.geojson
+
+# Python junk
+__pycache__/
+*.pyc
