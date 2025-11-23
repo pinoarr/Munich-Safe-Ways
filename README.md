@@ -113,7 +113,7 @@ def apply_bike_safety_layers(graph):
 ## Known limits
 - Mock crash/traffic data until real feeds are provided.
 - No persistence of UI selections across reloads.
-- Static frontend; no auth or multi-user state.
+- NO MOBILE VERSION YET!!!
 
 ## Testing
 - Backend syntax check: `python3 -m py_compile backend/main.py`
