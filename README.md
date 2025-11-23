@@ -1,4 +1,4 @@
-# Munich Safe Ways (HackaTUM – Landeshauptstadt Challenge)
+# Munich Pathfinder (HackaTUM – Landeshauptstadt Challenge)
 
 Built in 24 hours to make moving through Munich feel safer, calmer and more sustainable. The app serves tailored walking **and** biking routes with three personalities (Direct, Night/Ride Safe, Scenic), fast UI feedback, and explainable trade-offs.
 
