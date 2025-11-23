@@ -9,6 +9,12 @@
         :root {
             font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             color: #0f172a;
+            --fast-color: #6b7280;
+            --safe-color: #0b4b7c;
+            --scenic-color: #0f6d2c;
+            --fast-shadow: rgba(107, 114, 128, 0.24);
+            --safe-shadow: rgba(11, 75, 124, 0.24);
+            --scenic-shadow: rgba(15, 109, 44, 0.20);
         }
 
         * {
@@ -82,7 +88,22 @@
 
         .mode-card.active {
             border-color: #0f6d2c;
-            box-shadow: 0 22px 30px rgba(15, 109, 44, 0.18);
+            box-shadow: 0 18px 28px rgba(15, 109, 44, 0.12);
+        }
+
+        .mode-card.active[data-mode="fast"] {
+            border-color: var(--fast-color);
+            box-shadow: 0 22px 30px var(--fast-shadow);
+        }
+
+        .mode-card.active[data-mode="safe"] {
+            border-color: var(--safe-color);
+            box-shadow: 0 22px 30px var(--safe-shadow);
+        }
+
+        .mode-card.active[data-mode="scenic"] {
+            border-color: var(--scenic-color);
+            box-shadow: 0 22px 30px var(--scenic-shadow);
         }
 
         .mode-chip {
@@ -102,6 +123,18 @@
         .mode-card.active .mode-chip {
             background: #0f6d2c;
             color: #fff;
+        }
+
+        .mode-card.active[data-mode="fast"] .mode-chip {
+            background: var(--fast-color);
+        }
+
+        .mode-card.active[data-mode="safe"] .mode-chip {
+            background: var(--safe-color);
+        }
+
+        .mode-card.active[data-mode="scenic"] .mode-chip {
+            background: var(--scenic-color);
         }
 
         .mode-card p {
@@ -131,7 +164,7 @@
         .stat-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
+            gap: 14px 18px;
         }
 
         .stat-item {
@@ -195,6 +228,10 @@
                 right: 16px;
                 width: auto;
             }
+
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -202,10 +239,8 @@
 <body>
     <div class="controls">
         <h1>Choose your vibe</h1>
-        <p>Pick a routing personality to match how you want to move through Munich.</p>
         <div id="mode-buttons" class="mode-buttons"></div>
-        <div class="hint">Click once for start, once for end. A third click resets. Datasets: OpenStreetMap + Munich
-            incident archive (fuchsvomwalde/munichwatcher).</div>
+        <div class="hint">Click once for start, once for end. A third click resets.</div>
         <div class="stats-card" id="stats-card">
             <div class="stat-grid">
                 <div class="stat-item">
@@ -217,14 +252,14 @@
                     <div class="stat-value" id="stat-duration">--</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-label">Scenic score</div>
-                    <div class="stat-value" id="stat-scenic">--</div>
-                    <div class="stat-note">Trees / water exposure</div>
+                    <div class="stat-label">Steps</div>
+                    <div class="stat-value" id="stat-steps">--</div>
+                    <div class="stat-note" id="stat-kcal">≈ -- kcal burned</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-label">Safety score</div>
-                    <div class="stat-value" id="stat-safety">--</div>
-                    <div class="stat-note">Lighting + crowd support</div>
+                    <div class="stat-label">Saved CO2</div>
+                    <div class="stat-value" id="stat-co2">--</div>
+                    <div class="stat-note" id="stat-co2-eq">≈ tangible savings</div>
                 </div>
             </div>
             <div class="comparison-list" id="comparison-list">
@@ -237,6 +272,10 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const backendUrl = "http://localhost:8000";
+        const STEP_LENGTH_M = 0.78; // average adult step length in meters
+        const KCAL_PER_STEP = 0.05; // approximate kcal burned per step for a casual walk
+        const CAR_CO2_KG_PER_KM = 0.192; // average passenger car emissions per km
+        const PHONE_CHARGE_CO2_KG = 0.2; // approx CO2 per full smartphone charge, rounded for simpler integers
         const MODE_OPTIONS = [
             {
                 id: "fast",
@@ -255,9 +294,9 @@
             },
         ];
         const MODE_COLORS = {
-            fast: "#dd5e00",
-            safe: "#d1245c",
-            scenic: "#0e7c91",
+            fast: "#6b7280",   // greyish
+            safe: "#0b4b7c",   // dark bluish
+            scenic: "#0f6d2c", // green
         };
         const COMPARISON_METRICS = [
             { key: "green_share", upLabel: "more greenery", downLabel: "less greenery", betterWhen: "up" },
@@ -280,8 +319,10 @@
         const modeButtonsContainer = document.getElementById("mode-buttons");
         const statDistance = document.getElementById("stat-distance");
         const statDuration = document.getElementById("stat-duration");
-        const statScenic = document.getElementById("stat-scenic");
-        const statSafety = document.getElementById("stat-safety");
+        const statSteps = document.getElementById("stat-steps");
+        const statKcal = document.getElementById("stat-kcal");
+        const statCo2 = document.getElementById("stat-co2");
+        const statCo2Eq = document.getElementById("stat-co2-eq");
         const comparisonList = document.getElementById("comparison-list");
         resetStats();
 
@@ -390,15 +431,29 @@
             const stats = props.stats;
             const lengthValue = stats.length_m ?? props.length_m ?? 0;
             const durationValue = stats.duration_s ?? props.duration_s ?? 0;
+            const derived = computeDerivedImpacts(lengthValue);
             statDistance.textContent = formatDistance(lengthValue);
             statDuration.textContent = formatDuration(durationValue);
-            statScenic.textContent = `${Math.round((stats.avg_scenic || 0) * 100)}%`;
-            statSafety.textContent = `${Math.round((stats.avg_safe_score || 0) * 100)}%`;
-            renderComparison(props.comparison_to_fast);
+            statSteps.textContent = formatSteps(derived.steps);
+            statKcal.textContent = formatCalories(derived.kcal);
+            statCo2.textContent = formatCo2(derived.savedCo2Kg);
+            statCo2Eq.textContent = formatTangibleEquivalent(derived.savedCo2Kg);
+            renderComparison(props.comparison_to_fast, props.comparison_custom);
         }
 
-        function renderComparison(info) {
+        function renderComparison(info, customData) {
+            const custom = customData && Array.isArray(customData.statements) ? customData : null;
             comparisonList.innerHTML = "";
+            if (custom && Array.isArray(custom.statements) && custom.statements.length) {
+                custom.statements.forEach(item => {
+                    const pill = document.createElement("span");
+                    pill.className = `comparison-pill ${item.tone || "neutral"}`;
+                    pill.textContent = item.text;
+                    comparisonList.appendChild(pill);
+                });
+                return;
+            }
+
             if (!info || !info.ratios) {
                 comparisonList.innerHTML = '<span class="comparison-pill neutral">Run a route to compare with Direct</span>';
                 return;
@@ -456,11 +511,56 @@
             return `${minutes} min`;
         }
 
+        function formatSteps(steps) {
+            if (!steps) return "0";
+            return Math.round(steps).toLocaleString("en-US");
+        }
+
+        function formatCalories(kcal) {
+            if (!kcal || kcal < 1) return "≈ <1 kcal burned";
+            return `≈ ${Math.round(kcal).toLocaleString("en-US")} kcal burned`;
+        }
+
+        function formatCo2(kg) {
+            if (!kg) return "0 g";
+            if (kg < 0.1) {
+                const grams = kg * 1000;
+                return `${Math.round(grams)} g`;
+            }
+            if (kg < 10) {
+                return `${kg.toFixed(2)} kg`;
+            }
+            return `${kg.toFixed(1)} kg`;
+        }
+
+        function formatTangibleEquivalent(kg) {
+            if (!kg) return "≈ 0 phones charged";
+            const charges = Number(kg) / PHONE_CHARGE_CO2_KG;
+            const rounded = Math.max(1, Math.round(charges));
+            const integerValue = Math.trunc(rounded);
+            const label = integerValue === 1 ? "phone charged" : "phones charged";
+            return `≈ ${integerValue.toLocaleString("en-US")} ${label}`;
+        }
+
+        function computeDerivedImpacts(lengthMeters) {
+            const distanceKm = (lengthMeters || 0) / 1000;
+            const steps = lengthMeters > 0 ? lengthMeters / STEP_LENGTH_M : 0;
+            const kcal = steps * KCAL_PER_STEP;
+            const savedCo2Kg = distanceKm * CAR_CO2_KG_PER_KM;
+            return {
+                steps,
+                kcal,
+                savedCo2Kg,
+            };
+        }
+
         function resetStats() {
             statDistance.textContent = "--";
             statDuration.textContent = "--";
-            statScenic.textContent = "--";
-            statSafety.textContent = "--";
+            statSteps.textContent = "--";
+            statKcal.textContent = "≈ -- kcal burned";
+            statCo2.textContent = "--";
+            statCo2Eq.textContent = "≈ tangible savings";
             comparisonList.innerHTML = '<span class="comparison-pill neutral">Pick two points to compare modes</span>';
         }
     </script>
