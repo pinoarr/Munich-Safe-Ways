@@ -118,5 +118,5 @@ def apply_bike_safety_layers(graph):
 - Backend syntax check: `python3 -m py_compile backend/main.py`
 - Quick API smoke (requires backend running): use the curl example above and verify a GeoJSON Feature returns.
 
-## Inspiration
+## Inspiration/Read more on Devpost (https://devpost.com/software/munich-safe-route)
 Built for HackaTUM to make Munich’s everyday routes feel safer, greener and clearer—so judges and citizens can see not just where to go, but why that path is the right one tonight.
